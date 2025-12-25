@@ -73,8 +73,12 @@ def plot_portfolio_series(
 
     if not tickers or not weights:
         return None
-    weights_series = pd.Series(weights, index=tickers, dtype=float) / 100.0
-    subset = prices[tickers].dropna()
+    pairs = [(t, w) for t, w in zip(tickers, weights) if t in prices.columns]
+    if not pairs:
+        return None
+    tickers_filtered, weights_filtered = zip(*pairs)
+    weights_series = pd.Series(weights_filtered, index=tickers_filtered, dtype=float) / 100.0
+    subset = prices[list(tickers_filtered)].dropna()
     if subset.empty:
         return None
     portfolio = (subset * weights_series).sum(axis=1)
@@ -156,6 +160,14 @@ def parse_table_block(block: list[str]) -> tuple[list[str], list[list[str]]]:
     return header, rows
 
 
+def _is_valid_ticker(value: str) -> bool:
+    if value is None:
+        return False
+    text = str(value).strip()
+    if not text:
+        return False
+    return text.upper() != "TOTAL"
+
 def extract_selection_tickers(lines: list[str]) -> list[str]:
     tickers = []
     i = 0
@@ -167,7 +179,9 @@ def extract_selection_tickers(lines: list[str]) -> list[str]:
                 idx = header.index("Ticker")
                 for row in rows:
                     if len(row) > idx:
-                        tickers.append(row[idx])
+                        ticker = row[idx]
+                        if _is_valid_ticker(ticker):
+                            tickers.append(ticker)
                 return tickers
             i = end
             continue
@@ -223,7 +237,9 @@ def adjust_weights_in_report(
                 if idx is not None:
                     for row in rows:
                         if len(row) > idx:
-                            tickers.append(row[idx])
+                            ticker = row[idx]
+                            if _is_valid_ticker(ticker):
+                                tickers.append(ticker)
                 if not tickers:
                     tickers = tickers_fallback
                 weights = normalize_weights(tickers)
