@@ -5,36 +5,15 @@ import json
 import pandas as pd
 import requests
 
-def _top_rows(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
-    cols = ["rank", "score", "return_pct", "vol_pct", "max_drawdown_pct", "sector"]
-    present = [c for c in cols if c in df.columns]
-    return df.sort_values("rank").head(n)[present]
 
 def _table_text(df: pd.DataFrame, cols: list[str]) -> str:
+    """Convierte un subconjunto de columnas a texto plano para el prompt."""
     present = [c for c in cols if c in df.columns]
     return df[present].to_string()
 
-def _prompt_from_df(df: pd.DataFrame) -> str:
-    top = _top_rows(df, n=5)
-    top_text = top.reset_index().to_string(index=False)
-    total = len(df)
-    na_prices = int(df.get("has_na_prices", pd.Series(dtype=bool)).sum())
-    na_metrics = int(df.get("has_na_metrics", pd.Series(dtype=bool)).sum())
-    drawdown_pos = int(df.get("drawdown_positive", pd.Series(dtype=bool)).sum())
-
-    return (
-        "Eres un analista que redacta un resumen ejecutivo para comite.\n"
-        "Maximo 10 lineas. No des recomendaciones de inversion.\n"
-        "Explica que el scoring es determinista y con hard stops.\n"
-        "Menciona limitaciones y el control de calidad.\n\n"
-        f"Total de empresas: {total}\n"
-        f"Flags: has_na_prices={na_prices}, has_na_metrics={na_metrics}, "
-        f"drawdown_positive={drawdown_pos}\n\n"
-        "Top 5 (ordenado por rank):\n"
-        f"{top_text}\n"
-    )
 
 def _ollama_generate(prompt: str, model: str, timeout_s: int = 180) -> str:
+    """Llama a Ollama local y devuelve texto o un mensaje de error controlado."""
     payload = {
         "model": model,
         "prompt": prompt,
@@ -54,18 +33,9 @@ def _ollama_generate(prompt: str, model: str, timeout_s: int = 180) -> str:
     except Exception as exc:
         return f"Resumen no disponible. Error al invocar Ollama: {exc}"
 
-def generate_summary(
-    df: pd.DataFrame,
-    model: str,
-    max_lines: int = 10,
-    timeout_s: int = 180,
-) -> str:
-    prompt = _prompt_from_df(df)
-    text = _ollama_generate(prompt, model=model, timeout_s=timeout_s)
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    return "\n".join(lines[:max_lines])
 
 def generate_analysis_ibex(df: pd.DataFrame, model: str, timeout_s: int = 180) -> str:
+    """Genera un resumen ejecutivo (top/bottom) usando solo datos internos."""
     cols = [
         "return_pct",
         "vol_pct",
@@ -75,7 +45,7 @@ def generate_analysis_ibex(df: pd.DataFrame, model: str, timeout_s: int = 180) -
     ]
     top5 = df.sort_values("return_pct", ascending=False).head(5)
     bottom5 = df.sort_values("return_pct", ascending=True).head(5)
-    table_text = _table_text(df, ["return_pct", "vol_pct", "max_drawdown_pct", "sector", "score"])
+    table_text = _table_text(df, cols)
 
     prompt = (
         "Actua como analista financiero preparando un resumen para un comite de inversion.\n"
@@ -97,7 +67,9 @@ def generate_analysis_ibex(df: pd.DataFrame, model: str, timeout_s: int = 180) -
     )
     return _ollama_generate(prompt, model=model, timeout_s=timeout_s)
 
+
 def generate_sector_comparison(df: pd.DataFrame, model: str, timeout_s: int = 180) -> str:
+    """Genera comparativas por sectores usando solo la tabla interna."""
     prompt = (
         "Actua como analista financiero preparando una comparativa interna.\n"
         "Input: tabla de metricas 2025 del IBEX 35 (rentabilidad, volatilidad, drawdown).\n"
@@ -113,7 +85,13 @@ def generate_sector_comparison(df: pd.DataFrame, model: str, timeout_s: int = 18
     )
     return _ollama_generate(prompt, model=model, timeout_s=timeout_s)
 
-def generate_portfolio_suggestion(df: pd.DataFrame, model: str, timeout_s: int = 180) -> str:
+
+def generate_portfolio_suggestion(
+    df: pd.DataFrame,
+    model: str,
+    timeout_s: int = 180,
+) -> str:
+    """Pide al LLM una propuesta de 5 valores con pesos fijos del 20%."""
     prompt = (
         "Actua como gestor de inversiones preparando una propuesta preliminar.\n"
         "Input: metricas 2025 del IBEX 35 (rentabilidad, volatilidad, drawdown).\n"
@@ -134,7 +112,9 @@ def generate_portfolio_suggestion(df: pd.DataFrame, model: str, timeout_s: int =
     )
     return _ollama_generate(prompt, model=model, timeout_s=timeout_s)
 
+
 def join_sections(sections: list[tuple[str, str]]) -> str:
+    """Une secciones en un unico Markdown con titulos H2."""
     parts = []
     for title, body in sections:
         parts.append(f"## {title}")

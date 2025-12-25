@@ -3,8 +3,6 @@ from __future__ import annotations
 from io import BytesIO
 from pathlib import Path
 import re
-from typing import Iterable
-
 import pandas as pd
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -14,6 +12,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 
 def df_to_excel_bytes(df: pd.DataFrame) -> bytes:
+    """Serializa un DataFrame a bytes de Excel (para descargas en Streamlit)."""
     buf = BytesIO()
     df.to_excel(buf, index=True)
     buf.seek(0)
@@ -21,6 +20,7 @@ def df_to_excel_bytes(df: pd.DataFrame) -> bytes:
 
 
 def normalize_price_series(series: pd.Series) -> pd.Series:
+    """Normaliza una serie de precios a base 100."""
     s = series.dropna()
     if s.empty:
         return s
@@ -36,6 +36,7 @@ def plot_price_series(
     title: str,
     out_path: Path,
 ):
+    """Grafica series de precios normalizadas y guarda el PNG."""
     import matplotlib.pyplot as plt
     import matplotlib.dates as mdates
 
@@ -68,6 +69,7 @@ def plot_portfolio_series(
     title: str,
     out_path: Path,
 ):
+    """Grafica una cartera ponderada (base 100) y guarda el PNG."""
     import matplotlib.pyplot as plt
     import matplotlib.dates as mdates
 
@@ -100,6 +102,7 @@ def plot_portfolio_series(
 
 
 def markdown_to_paragraph_text(text: str) -> str:
+    """Convierte markdown simple a etiquetas compatibles con ReportLab."""
     text = text.replace("`", "")
     text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
     text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
@@ -107,10 +110,12 @@ def markdown_to_paragraph_text(text: str) -> str:
 
 
 def clean_summary_lines(summary: str) -> list[str]:
+    """Divide el resumen en lineas limpias para parsing."""
     return [line.rstrip() for line in summary.splitlines()]
 
 
 def parse_markdown_table(lines: list[str]) -> tuple[list[list[str]], int]:
+    """Parsea una tabla markdown y devuelve filas + lineas consumidas."""
     table_lines = []
     i = 0
     while i < len(lines) and is_table_line(lines[i]):
@@ -129,10 +134,12 @@ def parse_markdown_table(lines: list[str]) -> tuple[list[list[str]], int]:
 
 
 def is_table_line(line: str) -> bool:
+    """Detecta lineas con separadores '|'."""
     return "|" in line
 
 
 def is_separator_line(line: str) -> bool:
+    """Detecta la linea separadora de cabeceras en markdown."""
     stripped = line.strip()
     if "|" not in stripped:
         return False
@@ -141,6 +148,7 @@ def is_separator_line(line: str) -> bool:
 
 
 def extract_table_block(lines: list[str], start: int) -> tuple[list[str], int]:
+    """Extrae un bloque contiguo de lineas tipo tabla."""
     block = []
     i = start
     while i < len(lines) and is_table_line(lines[i]):
@@ -150,6 +158,7 @@ def extract_table_block(lines: list[str], start: int) -> tuple[list[str], int]:
 
 
 def parse_table_block(block: list[str]) -> tuple[list[str], list[list[str]]]:
+    """Parsea un bloque de tabla markdown a cabecera y filas."""
     if len(block) < 2 or not is_separator_line(block[1]):
         return [], []
     header = [c.strip() for c in block[0].strip("|").split("|")]
@@ -169,6 +178,7 @@ def _is_valid_ticker(value: str) -> bool:
     return text.upper() != "TOTAL"
 
 def extract_selection_tickers(lines: list[str]) -> list[str]:
+    """Busca la tabla de seleccion y devuelve tickers encontrados."""
     tickers = []
     i = 0
     while i < len(lines):
@@ -190,6 +200,7 @@ def extract_selection_tickers(lines: list[str]) -> list[str]:
 
 
 def normalize_weights(tickers: list[str]) -> list[float]:
+    """Distribuye pesos y asegura suma 100% con limites simples."""
     n = len(tickers)
     if n == 0:
         return []
@@ -209,6 +220,7 @@ def normalize_weights(tickers: list[str]) -> list[float]:
 
 
 def format_weight_table(tickers: list[str], weights: list[float]) -> list[str]:
+    """Construye una tabla markdown de pesos."""
     lines = ["| Ticker | Peso (%) |", "| --- | --- |"]
     for t, w in zip(tickers, weights):
         lines.append(f"| {t} | {w:.1f}% |")
@@ -220,6 +232,7 @@ def adjust_weights_in_report(
     report: str,
     fallback_tickers: list[str],
 ) -> tuple[str, list[str], list[float]]:
+    """Fuerza pesos validos en el reporte y devuelve tickers usados."""
     lines = clean_summary_lines(report)
     tickers_fallback = extract_selection_tickers(lines) or fallback_tickers
     out_lines = []
@@ -261,6 +274,7 @@ def adjust_weights_in_report(
 
 
 def story_from_report(report: str) -> list:
+    """Convierte el reporte markdown a elementos de ReportLab."""
     styles = getSampleStyleSheet()
     story = []
     lines = clean_summary_lines(report)
@@ -321,6 +335,7 @@ def story_from_report(report: str) -> list:
 
 
 def build_pdf(summary: str, df: pd.DataFrame, images: list[tuple[str, Path]]) -> bytes:
+    """Genera un PDF con el resumen, tablas y graficas."""
     buf = BytesIO()
     doc = SimpleDocTemplate(
         buf,
@@ -396,6 +411,7 @@ def build_pdf(summary: str, df: pd.DataFrame, images: list[tuple[str, Path]]) ->
 
 
 def _format_cell(value: object) -> str:
+    """Formatea valores para tabla PDF."""
     if value is None:
         return ""
     if isinstance(value, float):

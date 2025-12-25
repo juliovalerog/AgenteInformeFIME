@@ -5,6 +5,7 @@ import pandas as pd
 DEFAULT_SOURCE_URL = "https://www.bolsasymercados.es/"
 
 def load_sectors(path: str, source_url: str = DEFAULT_SOURCE_URL) -> pd.DataFrame:
+    """Carga sectores desde un Excel y devuelve un DataFrame indexado por ticker."""
     df = pd.read_excel(path)
 
     # Try common column names, fall back to first column.

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 import shutil
-from datetime import datetime
 
-import pandas as pd
 import streamlit as st
 
 from src.config import ScoringConfig
@@ -29,6 +28,7 @@ from src.sectors import DEFAULT_SOURCE_URL, load_sectors
 
 
 def _show_plot(fig) -> None:
+    """Muestra un grafico en Streamlit y cierra el objeto de Matplotlib."""
     if fig is None:
         return
     st.pyplot(fig)
@@ -38,6 +38,31 @@ def _show_plot(fig) -> None:
         plt.close(fig)
     except Exception:
         pass
+
+
+OUTPUTS_DIR = Path("outputs")
+SECTORS_FILENAME = "ibex35_ticker_sector_bmex.xlsx"
+DEFAULT_MODEL = "llama3.2:3b"
+
+
+def _init_run_dir() -> Path:
+    """Crea la carpeta de salida con timestamp para la ejecucion actual."""
+    run_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_dir = OUTPUTS_DIR / run_ts
+    run_dir.mkdir(parents=True, exist_ok=True)
+    return run_dir
+
+
+def _persist_inputs(uploaded_file, run_dir: Path) -> tuple[Path, Path]:
+    """Guarda el Excel de precios y copia el Excel de sectores (si existe)."""
+    prices_path = run_dir / uploaded_file.name
+    prices_path.write_bytes(uploaded_file.getbuffer())
+
+    sectors_src = Path("data") / SECTORS_FILENAME
+    sectors_path = run_dir / sectors_src.name
+    if sectors_src.exists():
+        shutil.copy2(sectors_src, sectors_path)
+    return prices_path, sectors_path
 
 
 st.set_page_config(page_title="IBEX 35 Demo", layout="wide")
@@ -58,52 +83,56 @@ with left:
     st.caption(
         "Sectores se cargan por defecto desde: data/ibex35_ticker_sector_bmex.xlsx"
     )
-    model = st.text_input("Modelo Ollama", value="llama3.2:3b")
-    timeout_s = st.number_input("Timeout Ollama (segundos)", min_value=30, max_value=600, value=180, step=30)
+    model = st.text_input("Modelo Ollama", value=DEFAULT_MODEL)
+    timeout_s = st.number_input(
+        "Timeout Ollama (segundos)",
+        min_value=30,
+        max_value=600,
+        value=180,
+        step=30,
+    )
     run_btn = st.button("Ejecutar pipeline", type="primary", use_container_width=True)
 
 with right:
     if run_btn:
+        # Limpiamos resultados previos para evitar confusiones visuales.
         st.session_state.pop("result_df", None)
         st.session_state.pop("summary_text", None)
 
         if uploaded is None:
             st.error("Falta el archivo de precios.")
         else:
-            run_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            run_dir = Path("outputs") / run_ts
-            run_dir.mkdir(parents=True, exist_ok=True)
-
-            prices_path = run_dir / uploaded.name
-            prices_path.write_bytes(uploaded.getbuffer())
-            sectors_src = Path("data/ibex35_ticker_sector_bmex.xlsx")
-            sectors_path = run_dir / sectors_src.name
-            if sectors_src.exists():
-                shutil.copy2(sectors_src, sectors_path)
+            run_dir = _init_run_dir()
+            prices_path, sectors_path = _persist_inputs(uploaded, run_dir)
 
             st.subheader("Paso 1. Carga y validacion (determinista)")
+            # Paso 1: lectura del Excel + validaciones basicas.
             prices = read_prices_excel(prices_path)
             st.write(f"Filas: {len(prices)} | Columnas (tickers): {len(prices.columns)}")
             st.write("Razonamiento: simbolico/determinista (reglas de carga).")
             st.dataframe(prices.head(5))
 
             st.subheader("Paso 2. Metricas (determinista)")
+            # Paso 2: formula por ticker (rentabilidad, volatilidad, drawdown).
             metrics = compute_metrics(prices)
             st.write("Razonamiento: simbolico/determinista (formulas).")
             st.dataframe(metrics.head(10))
 
             st.subheader("Paso 3. Scoring y hard stops (determinista)")
+            # Paso 3: scoring determinista con reglas y pesos fijos.
             cfg = ScoringConfig()
             scored = add_score(metrics, cfg)
             st.write("Razonamiento: simbolico/determinista (reglas y pesos).")
             st.dataframe(scored.head(10))
 
             st.subheader("Paso 4. Flags de calidad (determinista)")
+            # Paso 4: banderas simples para trazabilidad (NA, drawdown > 0).
             flags = quality_flags(prices, metrics)
             st.write("Razonamiento: simbolico/determinista (control de NA y drawdown).")
             st.dataframe(flags.head(10))
 
             st.subheader("Paso 5. Ranking (determinista)")
+            # Paso 5: ranking estable para asegurar trazabilidad.
             out = scored.join(flags)
             out = out.sort_values(
                 by=["score", "return_pct", "vol_pct", "max_drawdown_pct"],
@@ -115,6 +144,7 @@ with right:
             st.dataframe(out.head(10))
 
             st.subheader("Paso 6. Sectorizacion (externo controlado)")
+            # Paso 6: enriquecimiento con sectores desde archivo local.
             sectors = load_sectors(sectors_path, DEFAULT_SOURCE_URL)
             out = out.join(sectors, how="left")
             st.write("Razonamiento: enriquecimiento externo (solo reporting).")
@@ -126,33 +156,39 @@ with right:
             st.dataframe(out.head(10))
 
             st.subheader("Paso 7. Grafica top 5 (determinista)")
+            # Paso 7: grafica determinista con top 5.
             top5 = out.sort_values("rank").head(5).index.tolist()
             top5_path = run_dir / "grafica_top5.png"
             fig = plot_price_series(prices, top5, "Top 5 por scoring (base 100)", top5_path)
             _show_plot(fig)
 
             st.subheader("Paso 8. Grafica bottom 5 (determinista)")
+            # Paso 8: grafica determinista con bottom 5.
             bottom5 = out.sort_values("rank").tail(5).index.tolist()
             bottom5_path = run_dir / "grafica_bottom5.png"
             fig = plot_price_series(prices, bottom5, "Bottom 5 por scoring (base 100)", bottom5_path)
             _show_plot(fig)
 
             st.subheader("Paso 9. Analisis top/bottom y panorama general (LLM)")
+            # Paso 9: texto generado por LLM (sin datos externos).
             analysis_text = generate_analysis_ibex(out, model=model, timeout_s=timeout_s)
             st.write("Razonamiento: LLM con temperatura 0, sin datos externos.")
             st.code(analysis_text)
 
             st.subheader("Paso 10. Comparativa por sectores (LLM)")
+            # Paso 10: comparativa interna por sectores.
             sector_text = generate_sector_comparison(out, model=model, timeout_s=timeout_s)
             st.write("Razonamiento: LLM con temperatura 0, comparativa interna.")
             st.code(sector_text)
 
             st.subheader("Paso 11. Sugerencia de cartera diversificada (LLM)")
+            # Paso 11: propuesta preliminar con reglas estrictas.
             portfolio_text = generate_portfolio_suggestion(out, model=model, timeout_s=timeout_s)
             st.write("Razonamiento: LLM con temperatura 0, sin conclusiones causales.")
             st.code(portfolio_text)
 
             st.subheader("Paso 12. Informe final unificado")
+            # Paso 12: consolidar secciones y forzar pesos validos si hace falta.
             report = join_sections(
                 [
                     ("Analisis IBEX 2025", analysis_text),
@@ -167,6 +203,7 @@ with right:
             st.code(report)
 
             st.subheader("Paso 13. Grafica cartera propuesta (determinista)")
+            # Paso 13: grafica con la cartera propuesta.
             portfolio_path = run_dir / "grafica_cartera.png"
             fig = plot_portfolio_series(
                 prices,
@@ -177,6 +214,7 @@ with right:
             )
             _show_plot(fig)
 
+            # Persistimos resultados para trazabilidad.
             report_path = run_dir / "informe.md"
             report_path.write_text(report, encoding="utf-8")
 
@@ -192,6 +230,7 @@ with right:
             pdf_path = run_dir / "ibex35_summary.pdf"
             pdf_path.write_bytes(pdf_bytes)
 
+            # Guardamos artefactos en session_state para descargas.
             st.session_state["result_df"] = out
             st.session_state["summary_text"] = report
             st.session_state["pdf_bytes"] = pdf_bytes
