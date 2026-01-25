@@ -1,0 +1,8 @@
+## Analisis general
+Resumen no disponible. Error al invocar Ollama: HTTPConnectionPool(host='localhost', port=11434): Read timed out. (read timeout=180)
+
+## Comparativa por sectores
+Resumen no disponible. Error al invocar Ollama: HTTPConnectionPool(host='localhost', port=11434): Read timed out. (read timeout=180)
+
+## Sugerencia de cartera
+Resumen no disponible. Error al invocar Ollama: HTTPConnectionPool(host='localhost', port=11434): Read timed out. (read timeout=180)

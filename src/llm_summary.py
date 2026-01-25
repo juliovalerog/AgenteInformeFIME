@@ -121,3 +121,13 @@ def join_sections(sections: list[tuple[str, str]]) -> str:
         parts.append(body.strip())
         parts.append("")
     return "\n".join(parts).strip()
+
+
+def generate_summary(df: pd.DataFrame, model: str, timeout_s: int = 180) -> str:
+    """Genera el resumen unificado (analisis, sectores y cartera)."""
+    sections = [
+        ("Analisis general", generate_analysis_ibex(df, model=model, timeout_s=timeout_s)),
+        ("Comparativa por sectores", generate_sector_comparison(df, model=model, timeout_s=timeout_s)),
+        ("Sugerencia de cartera", generate_portfolio_suggestion(df, model=model, timeout_s=timeout_s)),
+    ]
+    return join_sections(sections)

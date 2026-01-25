@@ -22,3 +22,10 @@ def read_prices_excel(path: str | Path) -> pd.DataFrame:
     df[tickers] = df[tickers].apply(pd.to_numeric, errors="coerce")
 
     return df
+
+
+def export_results(df: pd.DataFrame, output_path: str | Path) -> None:
+    """Exporta resultados a un Excel en la ruta indicada."""
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_excel(output_path, index=True)
