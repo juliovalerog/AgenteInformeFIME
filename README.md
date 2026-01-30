@@ -66,13 +66,27 @@ comparar ejecuciones a lo largo del tiempo.
 ## Requisitos
 
 - Python 3.11+
-- Ollama con un modelo local (por defecto `llama3.2:3b`)
+- API Key de Gemini (free tier en Google AI Studio)
 
 ## Instalacion
 
 ```powershell
 .\.venv\Scripts\python -m pip install -r requirements.txt
 .\.venv\Scripts\python -m pip install matplotlib reportlab
+```
+
+## Configuracion Gemini
+
+Define la variable de entorno con tu API key:
+
+```powershell
+$env:GEMINI_API_KEY="TU_API_KEY"
+```
+
+Para hacerla persistente:
+
+```powershell
+setx GEMINI_API_KEY "TU_API_KEY"
 ```
 
 ## Uso
@@ -83,7 +97,7 @@ comparar ejecuciones a lo largo del tiempo.
 
 Dentro de la app puedes:
 - Subir tu Excel de precios.
-- Elegir el modelo de Ollama.
+- Elegir el modelo de Gemini (ej: `gemini-flash-latest`).
 - Ajustar el timeout.
 - Ejecutar el pipeline y descargar Excel/PDF.
 
@@ -96,13 +110,13 @@ Dentro de la app puedes:
   - `scoring.py`: scoring determinista.
   - `io_excel.py`: lectura y exportacion Excel.
   - `sectors.py`: carga de sectores.
-  - `llm_summary.py`: prompts y llamadas a Ollama.
+  - `llm_summary.py`: prompts y llamadas a Gemini API.
   - `reporting.py`: graficas y generacion de PDF.
 - `data/`: datos de entrada (precios y sectores).
 - `outputs/`: resultados por ejecucion (timestamp).
 
 ## Notas utiles
 
-- Si el modelo de Ollama no esta disponible, el pipeline fallara en los pasos LLM.
+- Si el modelo de Gemini no esta disponible para tu API key, el pipeline fallara en los pasos LLM.
 - Si todos los sectores salen iguales, revisa el Excel de sectores.
 - Puedes abrir el `informe.md` para comparar texto antes de generar el PDF.

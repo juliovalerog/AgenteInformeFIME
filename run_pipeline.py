@@ -13,7 +13,7 @@ def main():
     parser.add_argument("--sectors", default="data/ibex35_ticker_sector_bmex.xlsx", help="Ruta al Excel de sectores")
     parser.add_argument("--sector-source-url", default=DEFAULT_SOURCE_URL, help="Fuente oficial de sectores")
     parser.add_argument("--summary-out", default="outputs/ibex35_summary.txt", help="Ruta del resumen ejecutivo")
-    parser.add_argument("--model", default="llama3.2:3b", help="Modelo Ollama")
+    parser.add_argument("--model", default="gemini-flash-latest", help="Modelo Gemini")
     args = parser.parse_args()
 
     df = run_deterministic_pipeline(args.input)

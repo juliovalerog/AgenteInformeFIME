@@ -3,8 +3,15 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 import shutil
+import sys
 
 import streamlit as st
+
+# Ensure repository root is on sys.path so `src` imports work when Streamlit
+# sets the working directory to the app folder.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from src.config import ScoringConfig
 from src.io_excel import read_prices_excel
@@ -42,7 +49,7 @@ def _show_plot(fig) -> None:
 
 OUTPUTS_DIR = Path("outputs")
 SECTORS_FILENAME = "ibex35_ticker_sector_bmex.xlsx"
-DEFAULT_MODEL = "llama3.2:3b"
+DEFAULT_MODEL = "gemini-flash-latest"
 
 
 def _init_run_dir() -> Path:
@@ -83,13 +90,17 @@ with left:
     st.caption(
         "Sectores se cargan por defecto desde: data/ibex35_ticker_sector_bmex.xlsx"
     )
-    model = st.text_input("Modelo Ollama", value=DEFAULT_MODEL)
+    model = st.text_input("Modelo Gemini", value=DEFAULT_MODEL)
     timeout_s = st.number_input(
-        "Timeout Ollama (segundos)",
+        "Timeout Gemini (segundos)",
         min_value=30,
         max_value=600,
         value=180,
         step=30,
+    )
+    st.caption(
+        "Usa la variable de entorno GEMINI_API_KEY. Modelos validos: pega el nombre "
+        "sin el prefijo 'models/'."
     )
     run_btn = st.button("Ejecutar pipeline", type="primary", use_container_width=True)
 

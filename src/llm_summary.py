@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 import pandas as pd
 import requests
@@ -12,26 +13,38 @@ def _table_text(df: pd.DataFrame, cols: list[str]) -> str:
     return df[present].to_string()
 
 
-def _ollama_generate(prompt: str, model: str, timeout_s: int = 180) -> str:
-    """Llama a Ollama local y devuelve texto o un mensaje de error controlado."""
+def _gemini_generate(prompt: str, model: str, timeout_s: int = 180) -> str:
+    """Llama a Gemini API y devuelve texto o un mensaje de error controlado."""
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return (
+            "Resumen no disponible. Falta GEMINI_API_KEY en el entorno."
+        )
+    model_name = model.strip()
+    if model_name.startswith("models/"):
+        model_name = model_name[len("models/") :]
     payload = {
-        "model": model,
-        "prompt": prompt,
-        "stream": False,
-        "options": {"temperature": 0},
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0},
     }
     try:
         resp = requests.post(
-            "http://localhost:11434/api/generate",
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}",
             data=json.dumps(payload),
             headers={"Content-Type": "application/json"},
             timeout=timeout_s,
         )
         resp.raise_for_status()
         data = resp.json()
-        return data.get("response", "").strip()
+        candidates = data.get("candidates", [])
+        if not candidates:
+            return "Resumen no disponible. Gemini no devolvio candidatos."
+        parts = candidates[0].get("content", {}).get("parts", [])
+        if not parts:
+            return "Resumen no disponible. Gemini no devolvio texto."
+        return str(parts[0].get("text", "")).strip()
     except Exception as exc:
-        return f"Resumen no disponible. Error al invocar Ollama: {exc}"
+        return f"Resumen no disponible. Error al invocar Gemini: {exc}"
 
 
 def generate_analysis_ibex(df: pd.DataFrame, model: str, timeout_s: int = 180) -> str:
@@ -65,7 +78,7 @@ def generate_analysis_ibex(df: pd.DataFrame, model: str, timeout_s: int = 180) -
         "Tabla completa:\n"
         f"{table_text}\n"
     )
-    return _ollama_generate(prompt, model=model, timeout_s=timeout_s)
+    return _gemini_generate(prompt, model=model, timeout_s=timeout_s)
 
 
 def generate_sector_comparison(df: pd.DataFrame, model: str, timeout_s: int = 180) -> str:
@@ -83,7 +96,7 @@ def generate_sector_comparison(df: pd.DataFrame, model: str, timeout_s: int = 18
         "Tabla completa:\n"
         f"{_table_text(df, ['sector', 'return_pct', 'vol_pct', 'max_drawdown_pct'])}\n"
     )
-    return _ollama_generate(prompt, model=model, timeout_s=timeout_s)
+    return _gemini_generate(prompt, model=model, timeout_s=timeout_s)
 
 
 def generate_portfolio_suggestion(
@@ -110,7 +123,7 @@ def generate_portfolio_suggestion(
         "Tabla completa:\n"
         f"{_table_text(df, ['sector', 'return_pct', 'vol_pct', 'max_drawdown_pct', 'score'])}\n"
     )
-    return _ollama_generate(prompt, model=model, timeout_s=timeout_s)
+    return _gemini_generate(prompt, model=model, timeout_s=timeout_s)
 
 
 def join_sections(sections: list[tuple[str, str]]) -> str:
